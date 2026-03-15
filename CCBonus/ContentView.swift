@@ -23,8 +23,11 @@ struct ContentView: View {
         let isBonus = BonusTimeModel.isBonusTime(at: currentDate)
         let remaining = BonusTimeModel.timeUntilTransition(at: currentDate)
         let daysLeft = BonusTimeModel.promotionDaysRemaining(at: currentDate)
-        let etTime = BonusTimeModel.currentETTimeString(at: currentDate)
+        let ptTime = BonusTimeModel.currentPTTimeString(at: currentDate)
         let jstTime = BonusTimeModel.currentJSTTimeString(at: currentDate)
+        let isWeekend = BonusTimeModel.isWeekend(at: currentDate)
+        let dayName = BonusTimeModel.currentJSTDayName(at: currentDate)
+        let ptDayName = BonusTimeModel.currentPTDayName(at: currentDate)
 
         ZStack {
             LinearGradient(
@@ -44,7 +47,7 @@ struct ContentView: View {
                     .frame(height: 2)
 
                 // Header
-                header(isBonus: isBonus, promoActive: promoActive)
+                header(isBonus: isBonus, promoActive: promoActive, isWeekend: isWeekend)
 
                 // Promo period
                 promoBar(active: promoActive, daysLeft: daysLeft)
@@ -53,7 +56,7 @@ struct ContentView: View {
 
                 // Countdown
                 if promoActive {
-                    countdown(isBonus: isBonus, remaining: remaining)
+                    countdown(isBonus: isBonus, isWeekend: isWeekend, remaining: remaining)
                         .padding(.top, 14)
                         .padding(.horizontal, 20)
                 } else {
@@ -70,10 +73,10 @@ struct ContentView: View {
                 // Clock panel
                 let peak = BonusTimeModel.peakHoursJST(at: currentDate)
                 clockPanel(
-                    jstTime: jstTime, etTime: etTime,
-                    jstBonusFrom: String(format: "%02d:00", peak.end),
-                    jstBonusTo: String(format: "%02d:00", peak.start),
-                    etBonusFrom: "14:00", etBonusTo: "08:00"
+                    jstTime: jstTime, ptTime: ptTime,
+                    jstPeakStart: String(format: "%02d:00", peak.start),
+                    jstPeakEnd: String(format: "%02d:00", peak.end),
+                    isWeekend: isWeekend, dayName: dayName, ptDayName: ptDayName
                 )
                 .padding(.horizontal, 20)
                 .padding(.top, 14)
@@ -111,7 +114,7 @@ struct ContentView: View {
 
     // MARK: - Header
 
-    func header(isBonus: Bool, promoActive: Bool) -> some View {
+    func header(isBonus: Bool, promoActive: Bool, isWeekend: Bool) -> some View {
         HStack(alignment: .center) {
             Text("CLAUDE CODE")
                 .font(.system(size: 11, weight: .medium))
@@ -127,7 +130,7 @@ struct ContentView: View {
                         .frame(width: 6, height: 6)
                         .opacity(pulse ? 1 : 0.3)
 
-                    Text(isBonus ? "BONUS ACTIVE" : "STANDBY")
+                    Text(isBonus ? (isWeekend ? "WEEKEND 2X" : "BONUS ACTIVE") : "STANDBY")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(isBonus ? SXColor.teal : SXColor.amber)
                 }
@@ -185,12 +188,19 @@ struct ContentView: View {
 
     // MARK: - Countdown
 
-    func countdown(isBonus: Bool, remaining: (hours: Int, minutes: Int, seconds: Int)) -> some View {
+    func countdown(isBonus: Bool, isWeekend: Bool, remaining: (hours: Int, minutes: Int, seconds: Int)) -> some View {
         VStack(spacing: 8) {
-            Text(isBonus ? "BONUS ENDS IN" : "BONUS STARTS IN")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(SXColor.dim)
-                .tracking(2)
+            if isBonus {
+                Text(isWeekend ? "WEEKEND BONUS ENDS IN" : "BONUS ENDS IN")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(SXColor.dim)
+                    .tracking(2)
+            } else {
+                Text("BONUS STARTS IN")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(SXColor.dim)
+                    .tracking(2)
+            }
 
             HStack(spacing: 0) {
                 cDigit(remaining.hours, unit: "H")
@@ -226,9 +236,9 @@ struct ContentView: View {
 
     // MARK: - Clock Panel
 
-    func clockPanel(jstTime: String, etTime: String,
-                    jstBonusFrom: String, jstBonusTo: String,
-                    etBonusFrom: String, etBonusTo: String) -> some View {
+    func clockPanel(jstTime: String, ptTime: String,
+                    jstPeakStart: String, jstPeakEnd: String,
+                    isWeekend: Bool, dayName: String, ptDayName: String) -> some View {
         VStack(spacing: 12) {
             // JST (primary)
             VStack(spacing: 4) {
@@ -240,36 +250,58 @@ struct ContentView: View {
                     .font(.system(size: 36, weight: .light, design: .monospaced))
                     .foregroundStyle(SXColor.text)
                     .monospacedDigit()
-                HStack(spacing: 4) {
-                    Text("BONUS")
-                        .font(.system(size: 8, weight: .medium))
-                        .foregroundStyle(SXColor.teal.opacity(0.8))
-                    Text("\(jstBonusFrom) – \(jstBonusTo)")
-                        .font(.system(size: 10, weight: .regular, design: .monospaced))
-                        .foregroundStyle(SXColor.teal)
+                if isWeekend {
+                    HStack(spacing: 4) {
+                        Text(dayName)
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(SXColor.teal.opacity(0.8))
+                        Text("ALL DAY BONUS")
+                            .font(.system(size: 10, weight: .regular, design: .monospaced))
+                            .foregroundStyle(SXColor.teal)
+                    }
+                } else {
+                    HStack(spacing: 4) {
+                        Text("PEAK")
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundStyle(SXColor.amber.opacity(0.8))
+                        Text("\(jstPeakStart) – \(jstPeakEnd)")
+                            .font(.system(size: 10, weight: .regular, design: .monospaced))
+                            .foregroundStyle(SXColor.amber)
+                    }
                 }
             }
 
             Rectangle().fill(SXColor.border).frame(height: 1)
                 .padding(.horizontal, 20)
 
-            // ET (secondary)
+            // PT (secondary)
             VStack(spacing: 3) {
-                Text("EASTERN STANDARD TIME")
+                Text("PACIFIC TIME")
                     .font(.system(size: 8, weight: .medium))
                     .foregroundStyle(SXColor.dim.opacity(0.7))
                     .tracking(1.5)
-                Text(etTime)
-                    .font(.system(size: 20, weight: .light, design: .monospaced))
-                    .foregroundStyle(SXColor.text.opacity(0.7))
-                    .monospacedDigit()
-                HStack(spacing: 4) {
-                    Text("BONUS")
-                        .font(.system(size: 7, weight: .medium))
-                        .foregroundStyle(SXColor.teal.opacity(0.6))
-                    Text("\(etBonusFrom) – \(etBonusTo)")
+                HStack(spacing: 6) {
+                    Text(ptTime)
+                        .font(.system(size: 20, weight: .light, design: .monospaced))
+                        .foregroundStyle(SXColor.text.opacity(0.7))
+                        .monospacedDigit()
+                    Text(ptDayName)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(isWeekend ? SXColor.teal.opacity(0.7) : SXColor.dim.opacity(0.5))
+                }
+                if isWeekend {
+                    Text("WEEKEND — NO PEAK")
                         .font(.system(size: 9, weight: .regular, design: .monospaced))
                         .foregroundStyle(SXColor.teal.opacity(0.6))
+                } else {
+                    HStack(spacing: 4) {
+                        Text("PEAK")
+                            .font(.system(size: 7, weight: .medium))
+                            .foregroundStyle(SXColor.amber.opacity(0.6))
+                        Text("05:00 – 11:00")
+                            .font(.system(size: 9, weight: .regular, design: .monospaced))
+                            .foregroundStyle(SXColor.amber.opacity(0.6))
+                    }
                 }
             }
         }
@@ -326,7 +358,7 @@ struct ContentView: View {
                 .foregroundStyle(SXColor.dim.opacity(0.8))
                 .tracking(2)
             Spacer()
-            Text("PEAK 08–14 ET")
+            Text("PEAK 05–11 PT (WEEKDAYS)")
                 .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .foregroundStyle(SXColor.dim.opacity(0.8))
         }
@@ -345,6 +377,7 @@ struct TimelineView: View {
     private var jstSec: Int { BonusTimeModel.currentJSTSecond(at: currentDate) }
     private var peak: (start: Int, end: Int) { BonusTimeModel.peakHoursJST(at: currentDate) }
     private var isBonus: Bool { BonusTimeModel.isBonusTime(at: currentDate) }
+    private var isWeekend: Bool { BonusTimeModel.isWeekend(at: currentDate) }
     private var nowFrac: Double {
         (Double(jstHour) * 3600 + Double(jstMin) * 60 + Double(jstSec)) / 86400.0
     }
@@ -365,22 +398,41 @@ struct TimelineView: View {
                 .foregroundStyle(SXColor.dim)
                 .tracking(1.5)
             Spacer()
-            Text(isBonus ? "2X BONUS" : "1X PEAK")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundStyle(isBonus ? SXColor.teal : SXColor.amber)
+            if isWeekend {
+                Text("2X WEEKEND")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(SXColor.teal)
+            } else {
+                Text(isBonus ? "2X BONUS" : "1X PEAK")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(isBonus ? SXColor.teal : SXColor.amber)
+            }
         }
     }
 
     var timelineCanvas: some View {
+        Canvas { ctx, size in
+            let w = size.width
+            let h: CGFloat = 20.0
+            let barY: CGFloat = 14.0
+            let now = CGFloat(nowFrac)
 
-            // Timeline bar
-            Canvas { ctx, size in
-                let w = size.width
-                let h: CGFloat = 20.0
-                let barY: CGFloat = 14.0
+            if isWeekend {
+                // Weekend: entire bar is bonus
+                let barRect = CGRect(x: 0, y: barY, width: w, height: h)
+                ctx.fill(
+                    Path(roundedRect: barRect, cornerRadius: 4),
+                    with: .color(SXColor.teal.opacity(0.3))
+                )
+
+                let bonusText = ctx.resolve(Text("ALL DAY BONUS")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundColor(SXColor.teal))
+                ctx.draw(bonusText, at: CGPoint(x: w / 2, y: barY + h / 2), anchor: .center)
+            } else {
+                // Weekday: show peak/bonus zones
                 let peakStartFrac = CGFloat(peak.start) / 24.0
                 let peakEndFrac = CGFloat(peak.end) / 24.0
-                let now = CGFloat(nowFrac)
 
                 // Bonus background
                 let barRect = CGRect(x: 0, y: barY, width: w, height: h)
@@ -391,17 +443,16 @@ struct TimelineView: View {
 
                 // Peak zones (amber)
                 if peak.start > peak.end {
-                    // Left: 0 → peakEnd
+                    // Wraps around midnight: peak from start→24 and 0→end
                     let leftRect = CGRect(x: 0, y: barY, width: w * peakEndFrac, height: h)
-                    ctx.fill(Path( leftRect), with: .color(SXColor.amber.opacity(0.35)))
-                    // Right: peakStart → 24
+                    ctx.fill(Path(leftRect), with: .color(SXColor.amber.opacity(0.35)))
                     let rightRect = CGRect(x: w * peakStartFrac, y: barY,
                                            width: w * (1 - peakStartFrac), height: h)
-                    ctx.fill(Path( rightRect), with: .color(SXColor.amber.opacity(0.35)))
+                    ctx.fill(Path(rightRect), with: .color(SXColor.amber.opacity(0.35)))
                 } else {
                     let peakRect = CGRect(x: w * peakStartFrac, y: barY,
                                           width: w * (peakEndFrac - peakStartFrac), height: h)
-                    ctx.fill(Path( peakRect), with: .color(SXColor.amber.opacity(0.35)))
+                    ctx.fill(Path(peakRect), with: .color(SXColor.amber.opacity(0.35)))
                 }
 
                 // Boundary lines
@@ -437,33 +488,34 @@ struct TimelineView: View {
                     .font(.system(size: 8, weight: .bold))
                     .foregroundColor(SXColor.amber))
                 ctx.draw(peakText, at: CGPoint(x: peakCX, y: barY + h / 2), anchor: .center)
-
-                // Hour labels
-                let keyHours = [0, 3, 6, 9, 12, 15, 18, 21]
-                for hr in keyHours {
-                    let x = w * CGFloat(hr) / 24.0
-                    let isBound = hr == peak.start || hr == peak.end
-                    let label = ctx.resolve(Text("\(hr)")
-                        .font(.system(size: 8, weight: isBound ? .bold : .medium, design: .monospaced))
-                        .foregroundColor(isBound ? .white.opacity(0.85) : .white.opacity(0.35)))
-                    ctx.draw(label, at: CGPoint(x: x, y: barY + h + 10), anchor: .center)
-                }
-
-                // NOW indicator
-                var nowLine = Path()
-                nowLine.move(to: CGPoint(x: w * now, y: barY - 4))
-                nowLine.addLine(to: CGPoint(x: w * now, y: barY + h + 4))
-                ctx.stroke(nowLine, with: .color(.white),
-                          style: StrokeStyle(lineWidth: 2, lineCap: .round))
-
-                // NOW time label
-                let timeStr = String(format: "%02d:%02d", jstHour, jstMin)
-                let timeLabel = ctx.resolve(Text(timeStr)
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(.white))
-                let labelX = min(max(w * now, 20), w - 20)
-                ctx.draw(timeLabel, at: CGPoint(x: labelX, y: 4), anchor: .center)
             }
+
+            // Hour labels
+            let keyHours = [0, 3, 6, 9, 12, 15, 18, 21]
+            for hr in keyHours {
+                let x = w * CGFloat(hr) / 24.0
+                let isBound = !isWeekend && (hr == peak.start || hr == peak.end)
+                let label = ctx.resolve(Text("\(hr)")
+                    .font(.system(size: 8, weight: isBound ? .bold : .medium, design: .monospaced))
+                    .foregroundColor(isBound ? .white.opacity(0.85) : .white.opacity(0.35)))
+                ctx.draw(label, at: CGPoint(x: x, y: barY + h + 10), anchor: .center)
+            }
+
+            // NOW indicator
+            var nowLine = Path()
+            nowLine.move(to: CGPoint(x: w * now, y: barY - 4))
+            nowLine.addLine(to: CGPoint(x: w * now, y: barY + h + 4))
+            ctx.stroke(nowLine, with: .color(.white),
+                      style: StrokeStyle(lineWidth: 2, lineCap: .round))
+
+            // NOW time label
+            let timeStr = String(format: "%02d:%02d", jstHour, jstMin)
+            let timeLabel = ctx.resolve(Text(timeStr)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(.white))
+            let labelX = min(max(w * now, 20), w - 20)
+            ctx.draw(timeLabel, at: CGPoint(x: labelX, y: 4), anchor: .center)
+        }
     }
 }
 
