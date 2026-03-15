@@ -24,8 +24,29 @@ struct BonusTimeModel {
         return cal.component(.minute, from: date)
     }
 
+    // Promotion period: March 13-27, 2026 (ends 11:59 PM PT on March 27)
+    static func isPromotionActive(at date: Date = Date()) -> Bool {
+        let ptZone = TimeZone(identifier: "America/Los_Angeles")!
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = ptZone
+        let start = cal.date(from: DateComponents(year: 2026, month: 3, day: 13, hour: 0, minute: 0))!
+        let end = cal.date(from: DateComponents(year: 2026, month: 3, day: 27, hour: 23, minute: 59, second: 59))!
+        return date >= start && date <= end
+    }
+
+    /// Days remaining in promotion
+    static func promotionDaysRemaining(at date: Date = Date()) -> Int {
+        let ptZone = TimeZone(identifier: "America/Los_Angeles")!
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = ptZone
+        let end = cal.date(from: DateComponents(year: 2026, month: 3, day: 27, hour: 23, minute: 59, second: 59))!
+        let days = cal.dateComponents([.day], from: date, to: end).day ?? 0
+        return max(0, days)
+    }
+
     /// Whether the current time is bonus (off-peak) time
     static func isBonusTime(at date: Date = Date()) -> Bool {
+        guard isPromotionActive(at: date) else { return false }
         let hour = currentETHour(at: date)
         return hour < peakStartHourET || hour >= peakEndHourET
     }

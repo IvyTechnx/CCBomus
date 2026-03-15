@@ -19,8 +19,10 @@ struct ContentView: View {
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
+        let promoActive = BonusTimeModel.isPromotionActive(at: currentDate)
         let isBonus = BonusTimeModel.isBonusTime(at: currentDate)
         let remaining = BonusTimeModel.timeUntilTransition(at: currentDate)
+        let daysLeft = BonusTimeModel.promotionDaysRemaining(at: currentDate)
         let etTime = BonusTimeModel.currentETTimeString(at: currentDate)
         let jstTime = BonusTimeModel.currentJSTTimeString(at: currentDate)
 
@@ -36,41 +38,59 @@ struct ContentView: View {
             .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Top thin accent line
+                // Top accent line
                 Rectangle()
                     .fill(isBonus ? SXColor.teal : SXColor.amber)
                     .frame(height: 2)
 
                 // Header
-                header(isBonus: isBonus)
+                header(isBonus: isBonus, promoActive: promoActive)
+
+                // Promo period
+                promoBar(active: promoActive, daysLeft: daysLeft)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
 
                 // Countdown
-                countdown(isBonus: isBonus, remaining: remaining)
-                    .padding(.top, 16)
-                    .padding(.horizontal, 20)
-
-                // Clock
-                AnalogClockView(currentDate: currentDate)
-                    .frame(width: 210, height: 210)
-                    .padding(.top, 12)
-
-                // Time row
-                HStack(spacing: 0) {
-                    timeBlock(labelTop: "EASTERN", labelBottom: "STANDARD TIME", value: etTime)
-                    Rectangle().fill(SXColor.border).frame(width: 1)
-                    timeBlock(labelTop: "JAPAN", labelBottom: "STANDARD TIME", value: jstTime)
+                if promoActive {
+                    countdown(isBonus: isBonus, remaining: remaining)
+                        .padding(.top, 14)
+                        .padding(.horizontal, 20)
+                } else {
+                    promoExpired()
+                        .padding(.top, 14)
+                        .padding(.horizontal, 20)
                 }
-                .frame(height: 52)
-                .background(SXColor.panel)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(SXColor.border))
+
+                // 24-hour Timeline
+                TimelineView(currentDate: currentDate)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 18)
+
+                // Clock panel
+                let peak = BonusTimeModel.peakHoursJST(at: currentDate)
+                clockPanel(
+                    jstTime: jstTime, etTime: etTime,
+                    jstBonusFrom: String(format: "%02d:00", peak.end),
+                    jstBonusTo: String(format: "%02d:00", peak.start),
+                    etBonusFrom: "14:00", etBonusTo: "08:00"
+                )
                 .padding(.horizontal, 20)
                 .padding(.top, 14)
 
                 // Rate bar
                 rateBar(isBonus: isBonus)
                     .padding(.horizontal, 20)
-                    .padding(.top, 12)
+                    .padding(.top, 10)
+
+                // Weekly limit note
+                if isBonus {
+                    Text("OFF-PEAK USAGE DOES NOT COUNT TOWARD WEEKLY LIMITS")
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundStyle(SXColor.teal.opacity(0.8))
+                        .tracking(1)
+                        .padding(.top, 6)
+                }
 
                 Spacer(minLength: 0)
 
@@ -78,7 +98,7 @@ struct ContentView: View {
                 footer()
             }
         }
-        .frame(width: 340, height: 540)
+        .frame(width: 380, height: 520)
         .onReceive(timer) { date in
             currentDate = date
         }
@@ -91,7 +111,7 @@ struct ContentView: View {
 
     // MARK: - Header
 
-    func header(isBonus: Bool) -> some View {
+    func header(isBonus: Bool, promoActive: Bool) -> some View {
         HStack(alignment: .center) {
             Text("CLAUDE CODE")
                 .font(.system(size: 11, weight: .medium))
@@ -100,19 +120,67 @@ struct ContentView: View {
 
             Spacer()
 
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(isBonus ? SXColor.teal : SXColor.amber)
-                    .frame(width: 6, height: 6)
-                    .opacity(pulse ? 1 : 0.3)
+            if promoActive {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(isBonus ? SXColor.teal : SXColor.amber)
+                        .frame(width: 6, height: 6)
+                        .opacity(pulse ? 1 : 0.3)
 
-                Text(isBonus ? "BONUS ACTIVE" : "STANDBY")
+                    Text(isBonus ? "BONUS ACTIVE" : "STANDBY")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(isBonus ? SXColor.teal : SXColor.amber)
+                }
+            } else {
+                Text("PROMO ENDED")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(isBonus ? SXColor.teal : SXColor.amber)
+                    .foregroundStyle(.red.opacity(0.7))
             }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
+    }
+
+    // MARK: - Promo Bar
+
+    func promoBar(active: Bool, daysLeft: Int) -> some View {
+        HStack {
+            Text("PROMOTION")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(SXColor.dim)
+                .tracking(1.5)
+            Spacer()
+            if active {
+                Text("MAR 13–27, 2026 ・ \(daysLeft)D LEFT")
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(SXColor.text)
+            } else {
+                Text("ENDED MAR 27, 2026")
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.red.opacity(0.6))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(SXColor.panel)
+                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(SXColor.border))
+        )
+    }
+
+    // MARK: - Promo Expired
+
+    func promoExpired() -> some View {
+        VStack(spacing: 4) {
+            Text("PROMOTION HAS ENDED")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.red.opacity(0.7))
+                .tracking(2)
+            Text("Usage limits have returned to standard levels")
+                .font(.system(size: 10, weight: .regular))
+                .foregroundStyle(SXColor.dim)
+        }
     }
 
     // MARK: - Countdown
@@ -156,26 +224,62 @@ struct ContentView: View {
             .offset(y: -3)
     }
 
-    // MARK: - Time Block
+    // MARK: - Clock Panel
 
-    func timeBlock(labelTop: String, labelBottom: String, value: String) -> some View {
-        VStack(spacing: 3) {
-            VStack(spacing: 0) {
-                Text(labelTop)
+    func clockPanel(jstTime: String, etTime: String,
+                    jstBonusFrom: String, jstBonusTo: String,
+                    etBonusFrom: String, etBonusTo: String) -> some View {
+        VStack(spacing: 12) {
+            // JST (primary)
+            VStack(spacing: 4) {
+                Text("JAPAN STANDARD TIME")
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(SXColor.dim)
                     .tracking(2)
-                Text(labelBottom)
-                    .font(.system(size: 7, weight: .regular))
-                    .foregroundStyle(SXColor.dim.opacity(0.6))
-                    .tracking(1.5)
+                Text(jstTime)
+                    .font(.system(size: 36, weight: .light, design: .monospaced))
+                    .foregroundStyle(SXColor.text)
+                    .monospacedDigit()
+                HStack(spacing: 4) {
+                    Text("BONUS")
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundStyle(SXColor.teal.opacity(0.8))
+                    Text("\(jstBonusFrom) – \(jstBonusTo)")
+                        .font(.system(size: 10, weight: .regular, design: .monospaced))
+                        .foregroundStyle(SXColor.teal)
+                }
             }
-            Text(value)
-                .font(.system(size: 16, weight: .regular, design: .monospaced))
-                .foregroundStyle(SXColor.text)
-                .monospacedDigit()
+
+            Rectangle().fill(SXColor.border).frame(height: 1)
+                .padding(.horizontal, 20)
+
+            // ET (secondary)
+            VStack(spacing: 3) {
+                Text("EASTERN STANDARD TIME")
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundStyle(SXColor.dim.opacity(0.7))
+                    .tracking(1.5)
+                Text(etTime)
+                    .font(.system(size: 20, weight: .light, design: .monospaced))
+                    .foregroundStyle(SXColor.text.opacity(0.7))
+                    .monospacedDigit()
+                HStack(spacing: 4) {
+                    Text("BONUS")
+                        .font(.system(size: 7, weight: .medium))
+                        .foregroundStyle(SXColor.teal.opacity(0.6))
+                    Text("\(etBonusFrom) – \(etBonusTo)")
+                        .font(.system(size: 9, weight: .regular, design: .monospaced))
+                        .foregroundStyle(SXColor.teal.opacity(0.6))
+                }
+            }
         }
+        .padding(.vertical, 14)
         .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(SXColor.panel)
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(SXColor.border))
+        )
     }
 
     // MARK: - Rate Bar
@@ -195,11 +299,8 @@ struct ContentView: View {
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    // Track
                     RoundedRectangle(cornerRadius: 2)
                         .fill(.white.opacity(0.04))
-
-                    // Fill
                     RoundedRectangle(cornerRadius: 2)
                         .fill(
                             LinearGradient(
@@ -225,7 +326,7 @@ struct ContentView: View {
                 .foregroundStyle(SXColor.dim.opacity(0.8))
                 .tracking(2)
             Spacer()
-            Text("PEAK 21–03 JST (EDT)")
+            Text("PEAK 08–14 ET")
                 .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .foregroundStyle(SXColor.dim.opacity(0.8))
         }
@@ -234,226 +335,135 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Analog Clock (JST, SpaceX minimal)
+// MARK: - 24-Hour Horizontal Timeline (JST)
 
-struct AnalogClockView: View {
+struct TimelineView: View {
     let currentDate: Date
 
+    private var jstHour: Int { BonusTimeModel.currentJSTHour(at: currentDate) }
+    private var jstMin: Int { BonusTimeModel.currentJSTMinute(at: currentDate) }
+    private var jstSec: Int { BonusTimeModel.currentJSTSecond(at: currentDate) }
+    private var peak: (start: Int, end: Int) { BonusTimeModel.peakHoursJST(at: currentDate) }
+    private var isBonus: Bool { BonusTimeModel.isBonusTime(at: currentDate) }
+    private var nowFrac: Double {
+        (Double(jstHour) * 3600 + Double(jstMin) * 60 + Double(jstSec)) / 86400.0
+    }
+
     var body: some View {
-        let isBonus = BonusTimeModel.isBonusTime(at: currentDate)
-        let isAM = BonusTimeModel.isAM(at: currentDate)
-        let hourAngle = BonusTimeModel.hourHandAngle(at: currentDate)
-        let minuteAngle = BonusTimeModel.minuteHandAngle(at: currentDate)
-        let secondAngle = BonusTimeModel.secondHandAngle(at: currentDate)
-
-        // Peak hours in JST (e.g. EDT: 21-3, EST: 22-4)
-        let peak = BonusTimeModel.peakHoursJST(at: currentDate)
-        let peakStart12 = peak.start % 12  // e.g. 9 (for 21:00)
-        let peakEnd12 = peak.end % 12      // e.g. 3 (for 03:00)
-        let peakStartDeg = Double(peakStart12) * 30.0  // clock degrees
-        let peakEndDeg = Double(peakEnd12) * 30.0
-
-        ZStack {
-            Canvas { ctx, size in
-                let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                let R = min(size.width, size.height) / 2 - 4
-
-                // Outer ring
-                ctx.stroke(
-                    Path(ellipseIn: CGRect(x: center.x - R, y: center.y - R,
-                                           width: R * 2, height: R * 2)),
-                    with: .color(.white.opacity(0.08)),
-                    style: StrokeStyle(lineWidth: 1)
-                )
-
-                // Zone arcs (JST based)
-                let arcR = R - 6
-
-                // Peak arc (amber): peakStart → peakEnd (clockwise through 12)
-                let peakArc = Path { p in
-                    p.addArc(center: center, radius: arcR,
-                             startAngle: .degrees(peakStartDeg - 90),
-                             endAngle: .degrees(peakEndDeg - 90),
-                             clockwise: false)
-                }
-                ctx.stroke(peakArc,
-                          with: .color(SXColor.amber.opacity(0.25)),
-                          style: StrokeStyle(lineWidth: 10, lineCap: .butt))
-
-                // Bonus arc (teal): peakEnd → peakStart
-                let bonusArc = Path { p in
-                    p.addArc(center: center, radius: arcR,
-                             startAngle: .degrees(peakEndDeg - 90),
-                             endAngle: .degrees(peakStartDeg - 90),
-                             clockwise: false)
-                }
-                ctx.stroke(bonusArc,
-                          with: .color(SXColor.teal.opacity(0.15)),
-                          style: StrokeStyle(lineWidth: 10, lineCap: .butt))
-
-                // Zone labels
-                // PEAK label midpoint
-                let peakMidDeg: Double
-                if peakStartDeg > peakEndDeg {
-                    peakMidDeg = (peakStartDeg + peakEndDeg + 360) / 2
-                } else {
-                    peakMidDeg = (peakStartDeg + peakEndDeg) / 2
-                }
-                let peakLA = Angle.degrees(peakMidDeg - 90)
-                ctx.draw(
-                    ctx.resolve(Text("PEAK")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(SXColor.amber.opacity(0.9))),
-                    at: CGPoint(x: center.x + arcR * CGFloat(cos(peakLA.radians)),
-                                y: center.y + arcR * CGFloat(sin(peakLA.radians))),
-                    anchor: .center
-                )
-
-                // BONUS label midpoint
-                let bonusMidDeg: Double
-                if peakEndDeg < peakStartDeg {
-                    bonusMidDeg = (peakEndDeg + peakStartDeg) / 2
-                } else {
-                    bonusMidDeg = (peakEndDeg + peakStartDeg + 360) / 2
-                }
-                let bonusLA = Angle.degrees(bonusMidDeg - 90)
-                ctx.draw(
-                    ctx.resolve(Text("BONUS")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(SXColor.teal.opacity(0.9))),
-                    at: CGPoint(x: center.x + arcR * CGFloat(cos(bonusLA.radians)),
-                                y: center.y + arcR * CGFloat(sin(bonusLA.radians))),
-                    anchor: .center
-                )
-
-                // Boundary time labels outside ring
-                let boundR = R + 6
-                // Peak start (e.g. 21:00)
-                let psA = Angle.degrees(peakStartDeg - 90)
-                ctx.draw(
-                    ctx.resolve(Text("\(peak.start):00")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .foregroundColor(SXColor.amber.opacity(0.8))),
-                    at: CGPoint(x: center.x + boundR * CGFloat(cos(psA.radians)),
-                                y: center.y + boundR * CGFloat(sin(psA.radians))),
-                    anchor: .center
-                )
-                // Peak end (e.g. 3:00)
-                let peA = Angle.degrees(peakEndDeg - 90)
-                ctx.draw(
-                    ctx.resolve(Text("\(peak.end):00")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .foregroundColor(SXColor.teal.opacity(0.8))),
-                    at: CGPoint(x: center.x + boundR * CGFloat(cos(peA.radians)),
-                                y: center.y + boundR * CGFloat(sin(peA.radians))),
-                    anchor: .center
-                )
-
-                // Hour markers
-                for h in 1...12 {
-                    let deg = Double(h) * 30.0 - 90.0
-                    let cosA = CGFloat(cos(Angle.degrees(deg).radians))
-                    let sinA = CGFloat(sin(Angle.degrees(deg).radians))
-
-                    let isBound = (h == peakStart12 || h == peakEnd12)
-                    let isQuarter = (h % 3 == 0)
-                    let tickOut = R - 1
-                    let tickLen: CGFloat = isBound ? 10 : (isQuarter ? 9 : 5)
-
-                    let outer = CGPoint(x: center.x + tickOut * cosA, y: center.y + tickOut * sinA)
-                    let inner = CGPoint(x: center.x + (tickOut - tickLen) * cosA,
-                                        y: center.y + (tickOut - tickLen) * sinA)
-
-                    var tick = Path()
-                    tick.move(to: outer)
-                    tick.addLine(to: inner)
-
-                    if isBound {
-                        ctx.stroke(tick, with: .color(.white.opacity(0.85)),
-                                  style: StrokeStyle(lineWidth: 2))
-                    } else {
-                        ctx.stroke(tick, with: .color(.white.opacity(isQuarter ? 0.4 : 0.15)),
-                                  style: StrokeStyle(lineWidth: isQuarter ? 1.5 : 0.8))
-                    }
-
-                    // Numbers (skip boundary positions - they have time labels)
-                    if !isBound {
-                        let numR = R - 20
-                        let lp = CGPoint(x: center.x + numR * cosA, y: center.y + numR * sinA)
-                        ctx.draw(
-                            ctx.resolve(Text("\(h)")
-                                .font(.system(size: 11, weight: .light))
-                                .foregroundColor(.white.opacity(0.35))),
-                            at: lp, anchor: .center
-                        )
-                    }
-                }
-
-                // Minute ticks
-                for m in 0..<60 {
-                    if m % 5 == 0 { continue }
-                    let deg = Double(m) * 6.0 - 90.0
-                    let cosA = CGFloat(cos(Angle.degrees(deg).radians))
-                    let sinA = CGFloat(sin(Angle.degrees(deg).radians))
-                    let o = R - 1
-                    let outer = CGPoint(x: center.x + o * cosA, y: center.y + o * sinA)
-                    let inner = CGPoint(x: center.x + (o - 2) * cosA,
-                                        y: center.y + (o - 2) * sinA)
-                    var t = Path()
-                    t.move(to: outer)
-                    t.addLine(to: inner)
-                    ctx.stroke(t, with: .color(.white.opacity(0.06)),
-                              style: StrokeStyle(lineWidth: 0.5))
-                }
-
-                // Hands
-                drawHand(ctx: ctx, center: center, angle: hourAngle,
-                         length: R * 0.48, width: 3.5, color: .white)
-                drawHand(ctx: ctx, center: center, angle: minuteAngle,
-                         length: R * 0.68, width: 2, color: .white.opacity(0.75))
-
-                // Second hand
-                let secRad = Angle.degrees(secondAngle - 90).radians
-                let secEnd = CGPoint(x: center.x + R * 0.75 * CGFloat(cos(secRad)),
-                                     y: center.y + R * 0.75 * CGFloat(sin(secRad)))
-                let secTail = CGPoint(x: center.x - R * 0.12 * CGFloat(cos(secRad)),
-                                      y: center.y - R * 0.12 * CGFloat(sin(secRad)))
-                var secPath = Path()
-                secPath.move(to: secTail)
-                secPath.addLine(to: secEnd)
-                ctx.stroke(secPath, with: .color(.red),
-                          style: StrokeStyle(lineWidth: 1, lineCap: .round))
-
-                // Center
-                ctx.fill(Path(ellipseIn: CGRect(x: center.x - 4, y: center.y - 4, width: 8, height: 8)),
-                        with: .color(.red))
-                ctx.fill(Path(ellipseIn: CGRect(x: center.x - 1.5, y: center.y - 1.5, width: 3, height: 3)),
-                        with: .color(.black))
-            }
-
-            // JST label top
-            VStack(spacing: 1) {
-                Text("JAPAN TIME")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(SXColor.dim)
-                Text(isAM ? "AM" : "PM")
-                    .font(.system(size: 8, weight: .regular))
-                    .foregroundStyle(SXColor.dim.opacity(0.6))
-            }
-            .offset(y: -55)
+        VStack(spacing: 0) {
+            headerRow
+                .padding(.bottom, 8)
+            timelineCanvas
+                .frame(height: 50)
         }
     }
 
-    func drawHand(ctx: GraphicsContext, center: CGPoint,
-                  angle: Double, length: CGFloat, width: CGFloat, color: Color) {
-        let rad = Angle.degrees(angle - 90).radians
-        let end = CGPoint(x: center.x + length * CGFloat(cos(rad)),
-                          y: center.y + length * CGFloat(sin(rad)))
-        var p = Path()
-        p.move(to: center)
-        p.addLine(to: end)
-        ctx.stroke(p, with: .color(color),
-                  style: StrokeStyle(lineWidth: width, lineCap: .round))
+    var headerRow: some View {
+        HStack {
+            Text("JAPAN STANDARD TIME — 24H")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(SXColor.dim)
+                .tracking(1.5)
+            Spacer()
+            Text(isBonus ? "2X BONUS" : "1X PEAK")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(isBonus ? SXColor.teal : SXColor.amber)
+        }
+    }
+
+    var timelineCanvas: some View {
+
+            // Timeline bar
+            Canvas { ctx, size in
+                let w = size.width
+                let h: CGFloat = 20.0
+                let barY: CGFloat = 14.0
+                let peakStartFrac = CGFloat(peak.start) / 24.0
+                let peakEndFrac = CGFloat(peak.end) / 24.0
+                let now = CGFloat(nowFrac)
+
+                // Bonus background
+                let barRect = CGRect(x: 0, y: barY, width: w, height: h)
+                ctx.fill(
+                    Path(roundedRect: barRect, cornerRadius: 4),
+                    with: .color(SXColor.teal.opacity(0.2))
+                )
+
+                // Peak zones (amber)
+                if peak.start > peak.end {
+                    // Left: 0 → peakEnd
+                    let leftRect = CGRect(x: 0, y: barY, width: w * peakEndFrac, height: h)
+                    ctx.fill(Path( leftRect), with: .color(SXColor.amber.opacity(0.35)))
+                    // Right: peakStart → 24
+                    let rightRect = CGRect(x: w * peakStartFrac, y: barY,
+                                           width: w * (1 - peakStartFrac), height: h)
+                    ctx.fill(Path( rightRect), with: .color(SXColor.amber.opacity(0.35)))
+                } else {
+                    let peakRect = CGRect(x: w * peakStartFrac, y: barY,
+                                          width: w * (peakEndFrac - peakStartFrac), height: h)
+                    ctx.fill(Path( peakRect), with: .color(SXColor.amber.opacity(0.35)))
+                }
+
+                // Boundary lines
+                var psLine = Path()
+                psLine.move(to: CGPoint(x: w * peakStartFrac, y: barY - 2))
+                psLine.addLine(to: CGPoint(x: w * peakStartFrac, y: barY + h + 2))
+                ctx.stroke(psLine, with: .color(SXColor.amber.opacity(0.5)),
+                          style: StrokeStyle(lineWidth: 1))
+
+                var peLine = Path()
+                peLine.move(to: CGPoint(x: w * peakEndFrac, y: barY - 2))
+                peLine.addLine(to: CGPoint(x: w * peakEndFrac, y: barY + h + 2))
+                ctx.stroke(peLine, with: .color(SXColor.amber.opacity(0.5)),
+                          style: StrokeStyle(lineWidth: 1))
+
+                // Zone labels
+                let bonusCX: CGFloat = peak.start > peak.end
+                    ? w * (peakEndFrac + peakStartFrac) / 2
+                    : w * ((peakStartFrac + peakEndFrac + 1) / 2).truncatingRemainder(dividingBy: 1)
+                let bonusText = ctx.resolve(Text("BONUS")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundColor(SXColor.teal))
+                ctx.draw(bonusText, at: CGPoint(x: bonusCX, y: barY + h / 2), anchor: .center)
+
+                let peakCX: CGFloat
+                if peak.start > peak.end {
+                    let span = (1 - peakStartFrac) + peakEndFrac
+                    peakCX = ((peakStartFrac + span / 2).truncatingRemainder(dividingBy: 1)) * w
+                } else {
+                    peakCX = w * (peakStartFrac + peakEndFrac) / 2
+                }
+                let peakText = ctx.resolve(Text("PEAK")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundColor(SXColor.amber))
+                ctx.draw(peakText, at: CGPoint(x: peakCX, y: barY + h / 2), anchor: .center)
+
+                // Hour labels
+                let keyHours = [0, 3, 6, 9, 12, 15, 18, 21]
+                for hr in keyHours {
+                    let x = w * CGFloat(hr) / 24.0
+                    let isBound = hr == peak.start || hr == peak.end
+                    let label = ctx.resolve(Text("\(hr)")
+                        .font(.system(size: 8, weight: isBound ? .bold : .medium, design: .monospaced))
+                        .foregroundColor(isBound ? .white.opacity(0.85) : .white.opacity(0.35)))
+                    ctx.draw(label, at: CGPoint(x: x, y: barY + h + 10), anchor: .center)
+                }
+
+                // NOW indicator
+                var nowLine = Path()
+                nowLine.move(to: CGPoint(x: w * now, y: barY - 4))
+                nowLine.addLine(to: CGPoint(x: w * now, y: barY + h + 4))
+                ctx.stroke(nowLine, with: .color(.white),
+                          style: StrokeStyle(lineWidth: 2, lineCap: .round))
+
+                // NOW time label
+                let timeStr = String(format: "%02d:%02d", jstHour, jstMin)
+                let timeLabel = ctx.resolve(Text(timeStr)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(.white))
+                let labelX = min(max(w * now, 20), w - 20)
+                ctx.draw(timeLabel, at: CGPoint(x: labelX, y: 4), anchor: .center)
+            }
     }
 }
 
