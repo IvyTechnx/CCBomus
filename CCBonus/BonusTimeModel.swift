@@ -2,7 +2,7 @@ import Foundation
 
 struct BonusTimeModel {
     // Peak (no bonus) = PT 5:00-11:00 on weekdays only
-    // Weekends = all day bonus
+    // Weekends = all-day bonus
     static let peakStartHourPT = 5
     static let peakEndHourPT = 11
 
@@ -62,15 +62,7 @@ struct BonusTimeModel {
         return formatter.string(from: date)
     }
 
-    // MARK: - Weekend / Day
-
-    /// Whether the current time falls on a weekend in PT
-    static func isWeekend(at date: Date = Date()) -> Bool {
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = ptTimeZone
-        let weekday = cal.component(.weekday, from: date)
-        return weekday == 1 || weekday == 7 // Sunday = 1, Saturday = 7
-    }
+    // MARK: - Day Names
 
     /// Current day abbreviation in PT (e.g. "MON", "SAT")
     static func currentPTDayName(at date: Date = Date()) -> String {
@@ -88,6 +80,16 @@ struct BonusTimeModel {
         formatter.dateFormat = "EEE"
         formatter.locale = Locale(identifier: "en_US")
         return formatter.string(from: date).uppercased()
+    }
+
+    // MARK: - Weekend
+
+    /// Whether the current date is a weekend in PT timezone
+    static func isWeekendPT(at date: Date = Date()) -> Bool {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = ptTimeZone
+        let weekday = cal.component(.weekday, from: date)
+        return weekday == 1 || weekday == 7 // Sunday or Saturday
     }
 
     // MARK: - Promotion
@@ -113,9 +115,12 @@ struct BonusTimeModel {
     // MARK: - Bonus Time
 
     /// Whether the current time is bonus (off-peak) time
+    /// - Requires promotion to be active
+    /// - Weekends: always bonus (all day)
+    /// - Weekdays: bonus outside 5-11 AM PT
     static func isBonusTime(at date: Date = Date()) -> Bool {
         guard isPromotionActive(at: date) else { return false }
-        if isWeekend(at: date) { return true }
+        if isWeekendPT(at: date) { return true }
         let hour = currentPTHour(at: date)
         return hour < peakStartHourPT || hour >= peakEndHourPT
     }
@@ -143,27 +148,27 @@ struct BonusTimeModel {
 
         let hour = cal.component(.hour, from: date)
         let weekday = cal.component(.weekday, from: date)
-        let isWeekday = weekday >= 2 && weekday <= 6
+        let isWeekend = weekday == 1 || weekday == 7
 
-        // Today is a weekday and peak hasn't started yet
-        if isWeekday && hour < peakStartHourPT {
+        // If weekday and peak hasn't started yet today
+        if !isWeekend && hour < peakStartHourPT {
             var comps = cal.dateComponents([.year, .month, .day], from: date)
             comps.hour = peakStartHourPT; comps.minute = 0; comps.second = 0
             return cal.date(from: comps)!
         }
 
-        // Find the next weekday
-        var nextDate = cal.startOfDay(for: date)
-        for _ in 1...7 {
-            nextDate = cal.date(byAdding: .day, value: 1, to: nextDate)!
-            let wd = cal.component(.weekday, from: nextDate)
-            if wd >= 2 && wd <= 6 {
-                var comps = cal.dateComponents([.year, .month, .day], from: nextDate)
+        // Find next weekday at peakStartHourPT
+        var nextDay = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: date))!
+        for _ in 0..<7 {
+            let wd = cal.component(.weekday, from: nextDay)
+            if wd >= 2 && wd <= 6 { // Mon-Fri
+                var comps = cal.dateComponents([.year, .month, .day], from: nextDay)
                 comps.hour = peakStartHourPT; comps.minute = 0; comps.second = 0
                 return cal.date(from: comps)!
             }
+            nextDay = cal.date(byAdding: .day, value: 1, to: nextDay)!
         }
-        return date // fallback, should not reach
+        return date // Fallback
     }
 
     /// Next time bonus begins (today at 11:00 AM PT)
@@ -179,15 +184,14 @@ struct BonusTimeModel {
 
     /// Progress through the current period (0.0 to 1.0)
     static func periodProgress(at date: Date = Date()) -> Double {
-        if !isBonusTime(at: date) {
-            // Peak: PT 5:00-11:00 (6 hours = 360 min)
-            let hour = currentPTHour(at: date)
-            let minute = currentPTMinute(at: date)
-            let elapsed = Double((hour - peakStartHourPT) * 60 + minute)
-            return elapsed / (6.0 * 60.0)
-        } else {
+        if isBonusTime(at: date) {
             return 1.0
         }
+        // Peak: PT 5:00-11:00 (6 hours = 360 min)
+        let hour = currentPTHour(at: date)
+        let minute = currentPTMinute(at: date)
+        let elapsed = Double((hour - peakStartHourPT) * 60 + minute)
+        return elapsed / (6.0 * 60.0)
     }
 
     // MARK: - JST Peak Hours

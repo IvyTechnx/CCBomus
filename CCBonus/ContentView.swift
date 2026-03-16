@@ -21,11 +21,11 @@ struct ContentView: View {
     var body: some View {
         let promoActive = BonusTimeModel.isPromotionActive(at: currentDate)
         let isBonus = BonusTimeModel.isBonusTime(at: currentDate)
+        let isWeekend = BonusTimeModel.isWeekendPT(at: currentDate)
         let remaining = BonusTimeModel.timeUntilTransition(at: currentDate)
         let daysLeft = BonusTimeModel.promotionDaysRemaining(at: currentDate)
         let ptTime = BonusTimeModel.currentPTTimeString(at: currentDate)
         let jstTime = BonusTimeModel.currentJSTTimeString(at: currentDate)
-        let isWeekend = BonusTimeModel.isWeekend(at: currentDate)
         let dayName = BonusTimeModel.currentJSTDayName(at: currentDate)
         let ptDayName = BonusTimeModel.currentPTDayName(at: currentDate)
 
@@ -47,12 +47,17 @@ struct ContentView: View {
                     .frame(height: 2)
 
                 // Header
-                header(isBonus: isBonus, promoActive: promoActive, isWeekend: isWeekend)
+                header(isBonus: isBonus, isWeekend: isWeekend, promoActive: promoActive)
 
                 // Promo period
                 promoBar(active: promoActive, daysLeft: daysLeft)
                     .padding(.horizontal, 20)
                     .padding(.top, 8)
+
+                // Rule bar
+                ruleBar(isWeekend: isWeekend)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 4)
 
                 // Countdown
                 if promoActive {
@@ -76,7 +81,8 @@ struct ContentView: View {
                     jstTime: jstTime, ptTime: ptTime,
                     jstPeakStart: String(format: "%02d:00", peak.start),
                     jstPeakEnd: String(format: "%02d:00", peak.end),
-                    isWeekend: isWeekend, dayName: dayName, ptDayName: ptDayName
+                    dayName: dayName, ptDayName: ptDayName,
+                    isBonus: isBonus, isWeekend: isWeekend
                 )
                 .padding(.horizontal, 20)
                 .padding(.top, 14)
@@ -114,7 +120,7 @@ struct ContentView: View {
 
     // MARK: - Header
 
-    func header(isBonus: Bool, promoActive: Bool, isWeekend: Bool) -> some View {
+    func header(isBonus: Bool, isWeekend: Bool, promoActive: Bool) -> some View {
         HStack(alignment: .center) {
             Text("CLAUDE CODE")
                 .font(.system(size: 11, weight: .medium))
@@ -130,9 +136,15 @@ struct ContentView: View {
                         .frame(width: 6, height: 6)
                         .opacity(pulse ? 1 : 0.3)
 
-                    Text(isBonus ? (isWeekend ? "WEEKEND 2X" : "BONUS ACTIVE") : "STANDBY")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(isBonus ? SXColor.teal : SXColor.amber)
+                    if isWeekend {
+                        Text("WEEKEND 2X")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(SXColor.teal)
+                    } else {
+                        Text(isBonus ? "OFF-PEAK 2X" : "PEAK")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(isBonus ? SXColor.teal : SXColor.amber)
+                    }
                 }
             } else {
                 Text("PROMO ENDED")
@@ -186,17 +198,45 @@ struct ContentView: View {
         }
     }
 
+    // MARK: - Rule Bar
+
+    func ruleBar(isWeekend: Bool) -> some View {
+        HStack {
+            Text("BONUS RULE")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(SXColor.dim)
+                .tracking(1.5)
+            Spacer()
+            if isWeekend {
+                Text("WEEKEND ・ ALL-DAY 2X")
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(SXColor.teal)
+            } else {
+                Text("WEEKDAY ・ 2X OUTSIDE 05-11 PT")
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(SXColor.text)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(SXColor.panel)
+                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(SXColor.border))
+        )
+    }
+
     // MARK: - Countdown
 
     func countdown(isBonus: Bool, isWeekend: Bool, remaining: (hours: Int, minutes: Int, seconds: Int)) -> some View {
         VStack(spacing: 8) {
-            if isBonus {
-                Text(isWeekend ? "WEEKEND BONUS ENDS IN" : "BONUS ENDS IN")
+            if isWeekend {
+                Text("WEEKEND BONUS ・ PEAK STARTS IN")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(SXColor.dim)
                     .tracking(2)
             } else {
-                Text("BONUS STARTS IN")
+                Text(isBonus ? "BONUS ENDS IN" : "BONUS STARTS IN")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(SXColor.dim)
                     .tracking(2)
@@ -238,7 +278,8 @@ struct ContentView: View {
 
     func clockPanel(jstTime: String, ptTime: String,
                     jstPeakStart: String, jstPeakEnd: String,
-                    isWeekend: Bool, dayName: String, ptDayName: String) -> some View {
+                    dayName: String, ptDayName: String,
+                    isBonus: Bool, isWeekend: Bool) -> some View {
         VStack(spacing: 12) {
             // JST (primary)
             VStack(spacing: 4) {
@@ -250,21 +291,22 @@ struct ContentView: View {
                     .font(.system(size: 36, weight: .light, design: .monospaced))
                     .foregroundStyle(SXColor.text)
                     .monospacedDigit()
-                if isWeekend {
-                    HStack(spacing: 4) {
+                HStack(spacing: 4) {
+                    if dayName != ptDayName {
+                        Text("\(dayName) (PT: \(ptDayName))")
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundStyle(SXColor.dim.opacity(0.8))
+                    } else {
                         Text(dayName)
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(SXColor.teal.opacity(0.8))
-                        Text("ALL DAY BONUS")
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundStyle(SXColor.dim.opacity(0.8))
+                    }
+                    if isWeekend {
+                        Text("ALL-DAY BONUS")
                             .font(.system(size: 10, weight: .regular, design: .monospaced))
                             .foregroundStyle(SXColor.teal)
-                    }
-                } else {
-                    HStack(spacing: 4) {
-                        Text("PEAK")
-                            .font(.system(size: 8, weight: .medium))
-                            .foregroundStyle(SXColor.amber.opacity(0.8))
-                        Text("\(jstPeakStart) – \(jstPeakEnd)")
+                    } else {
+                        Text("PEAK \(jstPeakStart) – \(jstPeakEnd)")
                             .font(.system(size: 10, weight: .regular, design: .monospaced))
                             .foregroundStyle(SXColor.amber)
                     }
@@ -276,10 +318,21 @@ struct ContentView: View {
 
             // PT (secondary)
             VStack(spacing: 3) {
-                Text("PACIFIC TIME")
-                    .font(.system(size: 8, weight: .medium))
-                    .foregroundStyle(SXColor.dim.opacity(0.7))
-                    .tracking(1.5)
+                HStack(spacing: 4) {
+                    Text("PACIFIC TIME")
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundStyle(SXColor.dim.opacity(0.7))
+                        .tracking(1.5)
+                    Text("BASIS")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(SXColor.blue.opacity(0.6))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(SXColor.blue.opacity(0.1))
+                        )
+                }
                 HStack(spacing: 6) {
                     Text(ptTime)
                         .font(.system(size: 20, weight: .light, design: .monospaced))
@@ -287,12 +340,17 @@ struct ContentView: View {
                         .monospacedDigit()
                     Text(ptDayName)
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(isWeekend ? SXColor.teal.opacity(0.7) : SXColor.dim.opacity(0.5))
+                        .foregroundStyle(SXColor.dim.opacity(0.5))
                 }
                 if isWeekend {
-                    Text("WEEKEND — NO PEAK")
-                        .font(.system(size: 9, weight: .regular, design: .monospaced))
-                        .foregroundStyle(SXColor.teal.opacity(0.6))
+                    HStack(spacing: 4) {
+                        Text("WEEKEND")
+                            .font(.system(size: 7, weight: .medium))
+                            .foregroundStyle(SXColor.teal.opacity(0.6))
+                        Text("ALL-DAY 2X")
+                            .font(.system(size: 9, weight: .regular, design: .monospaced))
+                            .foregroundStyle(SXColor.teal.opacity(0.6))
+                    }
                 } else {
                     HStack(spacing: 4) {
                         Text("PEAK")
@@ -358,7 +416,7 @@ struct ContentView: View {
                 .foregroundStyle(SXColor.dim.opacity(0.8))
                 .tracking(2)
             Spacer()
-            Text("PEAK 05–11 PT (WEEKDAYS)")
+            Text("WD 05-11 PT PEAK / WE ALL-DAY 2X")
                 .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .foregroundStyle(SXColor.dim.opacity(0.8))
         }
@@ -377,7 +435,7 @@ struct TimelineView: View {
     private var jstSec: Int { BonusTimeModel.currentJSTSecond(at: currentDate) }
     private var peak: (start: Int, end: Int) { BonusTimeModel.peakHoursJST(at: currentDate) }
     private var isBonus: Bool { BonusTimeModel.isBonusTime(at: currentDate) }
-    private var isWeekend: Bool { BonusTimeModel.isWeekend(at: currentDate) }
+    private var isWeekend: Bool { BonusTimeModel.isWeekendPT(at: currentDate) }
     private var nowFrac: Double {
         (Double(jstHour) * 3600 + Double(jstMin) * 60 + Double(jstSec)) / 86400.0
     }
@@ -399,11 +457,11 @@ struct TimelineView: View {
                 .tracking(1.5)
             Spacer()
             if isWeekend {
-                Text("2X WEEKEND")
+                Text("2X ALL DAY")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .foregroundStyle(SXColor.teal)
             } else {
-                Text(isBonus ? "2X BONUS" : "1X PEAK")
+                Text(isBonus ? "2X OFF-PEAK" : "1X PEAK")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .foregroundStyle(isBonus ? SXColor.teal : SXColor.amber)
             }
@@ -418,14 +476,14 @@ struct TimelineView: View {
             let now = CGFloat(nowFrac)
 
             if isWeekend {
-                // Weekend: entire bar is bonus
+                // Weekend: entire bar is bonus (teal)
                 let barRect = CGRect(x: 0, y: barY, width: w, height: h)
                 ctx.fill(
                     Path(roundedRect: barRect, cornerRadius: 4),
                     with: .color(SXColor.teal.opacity(0.3))
                 )
 
-                let bonusText = ctx.resolve(Text("ALL DAY BONUS")
+                let bonusText = ctx.resolve(Text("ALL-DAY BONUS")
                     .font(.system(size: 8, weight: .bold))
                     .foregroundColor(SXColor.teal))
                 ctx.draw(bonusText, at: CGPoint(x: w / 2, y: barY + h / 2), anchor: .center)
@@ -443,7 +501,6 @@ struct TimelineView: View {
 
                 // Peak zones (amber)
                 if peak.start > peak.end {
-                    // Wraps around midnight: peak from start→24 and 0→end
                     let leftRect = CGRect(x: 0, y: barY, width: w * peakEndFrac, height: h)
                     ctx.fill(Path(leftRect), with: .color(SXColor.amber.opacity(0.35)))
                     let rightRect = CGRect(x: w * peakStartFrac, y: barY,
@@ -472,7 +529,7 @@ struct TimelineView: View {
                 let bonusCX: CGFloat = peak.start > peak.end
                     ? w * (peakEndFrac + peakStartFrac) / 2
                     : w * ((peakStartFrac + peakEndFrac + 1) / 2).truncatingRemainder(dividingBy: 1)
-                let bonusText = ctx.resolve(Text("BONUS")
+                let bonusText = ctx.resolve(Text("OFF-PEAK")
                     .font(.system(size: 8, weight: .bold))
                     .foregroundColor(SXColor.teal))
                 ctx.draw(bonusText, at: CGPoint(x: bonusCX, y: barY + h / 2), anchor: .center)
